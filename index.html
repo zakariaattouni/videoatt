@@ -35,8 +35,8 @@ select,input[type=number]{background:#12131a;border:1px solid var(--ln);border-r
 .clip .nm small{display:block;color:var(--mu)}
 .clip button{padding:6px 9px}
 .dur{display:flex;align-items:center;gap:2px}
-.dur input{width:56px;text-align:center}
-.dur button{padding:4px 7px;font-weight:700;line-height:1}
+.dur input{width:62px;text-align:center}
+.dur button{padding:4px 8px;font-weight:700;line-height:1}
 .lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
 .lib button{text-align:center;padding:10px 6px}
 .lib button.on{border-color:var(--ac2);background:#1c3340}
@@ -101,13 +101,15 @@ video#res{width:100%;max-height:60vh;background:#000;border-radius:10px;margin-t
   <div class="row"><a id="dl" class="btn p" download>⬇ حفظ الفيديو على الجهاز</a></div>
 </section>
 <div id="toast"></div>
+
 <script>
 const $=s=>document.querySelector(s), cv=$('#cv'), cx=cv.getContext('2d');
 const bg=document.createElement('canvas'), bx=bg.getContext('2d');
 let clips=[], music=null, ac=null, running=false, stopFlag=false, selLib=-1, prevSrc=null;
 const cache={};
 const COL=['#ff4d4d','#ffb62e','#ffe94d','#5be37d','#35c7ff','#7a7bff','#d46bff','#ff6bb5'];
-const fmt=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+const MAXDUR=600;
+const fmt=s=>{s=Math.max(0,Math.floor(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',3500)}
 window.onerror=m=>toast('خطأ: '+m);
@@ -115,7 +117,7 @@ window.onunhandledrejection=e=>toast('خطأ: '+(e.reason&&e.reason.message||e.r
 const AC=()=>ac||(ac=new (window.AudioContext||window.webkitAudioContext)());
 const total=()=>clips.reduce((a,c)=>a+c.dur,0);
 const dims=c=>c.type==='video'?[c.el.videoWidth,c.el.videoHeight]:[c.el.naturalWidth,c.el.naturalHeight];
-/* ---------- الرسم ---------- */
+
 function size(){
   if(running)return;
   const v=$('#ratio').value;let w=1280,h=720;
@@ -147,9 +149,15 @@ function frame(c,a=1){
     }}
   watermark();
 }
-function idle(){frame(clips[0]);if(!clips.length){cx.fillStyle='#8e93a8';cx.font=`${cv.width*.035}px sans-serif`;cx.textAlign='center';cx.fillText('أضف صورًا أو فيديوهات للبدء',cv.width/2,cv.height/2);cx.textAlign='start'}
-  $('#time').textContent='0:00 / '+fmt(total())}
-/* ---------- الوسائط ---------- */
+function idle(){
+  frame(clips[0]);
+  if(!clips.length){
+    cx.fillStyle='#8e93a8';cx.font=`${cv.width*.035}px sans-serif`;cx.textAlign='center';
+    cx.fillText('أضف صورًا أو فيديوهات للبدء',cv.width/2,cv.height/2);cx.textAlign='start';
+  }
+  $('#time').textContent='0:00 / '+fmt(total());
+}
+
 $('#files').onchange=async e=>{
   for(const f of e.target.files){
     try{const url=URL.createObjectURL(f);
@@ -168,26 +176,29 @@ function render(){
     d.innerHTML=th+`<div class="nm">${c.name.replace(/</g,'')}<small>${c.type==='image'?'صورة':'فيديو · '+fmt(c.dur)}</small></div>`;
     if(c.type==='image'){
       const w=document.createElement('div');w.className='dur';
-      const mn=document.createElement('button');mn.textContent='−';mn.title='إنقاص المدة';
-      const n=document.createElement('input');n.type='number';n.min=.5;n.max=60;n.step=.5;n.value=c.dur;
-      const pl=document.createElement('button');pl.textContent='+';pl.title='زيادة المدة';
-      const set=v=>{c.dur=Math.max(.5,Math.min(60,+v||3));n.value=c.dur;idle()};
-      mn.onclick=()=>set(c.dur-.5);
-      pl.onclick=()=>set(c.dur+.5);
+      const mn=document.createElement('button');mn.type='button';mn.textContent='−';mn.title='إنقاص المدة';
+      const n=document.createElement('input');n.type='number';n.min='0.5';n.max=String(MAXDUR);n.step='0.5';n.value=c.dur;
+      const pl=document.createElement('button');pl.type='button';pl.textContent='+';pl.title='زيادة المدة';
+      const clamp=v=>{v=parseFloat(v);if(!isFinite(v))v=3;return Math.max(0.5,Math.min(MAXDUR,v))};
+      const set=v=>{c.dur=clamp(v);n.value=c.dur;idle()};
+      mn.onclick=()=>set(c.dur-0.5);
+      pl.onclick=()=>set(c.dur+0.5);
       n.onchange=()=>set(n.value);
+      n.oninput=()=>{const v=parseFloat(n.value);if(isFinite(v)&&v>0)c.dur=clamp(v)};
       w.append(mn,n,pl);d.appendChild(w);
     }
-    [['▲',-1],['▼',1],['✕',0]].forEach(([t,m])=>{const b=document.createElement('button');b.textContent=t;
+    [['▲',-1],['▼',1],['✕',0]].forEach(([t,m])=>{const b=document.createElement('button');b.type='button';b.textContent=t;
       b.onclick=()=>{if(running)return toast('أوقف المعاينة أولًا');
         if(!m)clips.splice(i,1);else{const j=i+m;if(j<0||j>=clips.length)return;[clips[i],clips[j]]=[clips[j],clips[i]]}render();size()};d.appendChild(b)});
     L.appendChild(d);
   });
 }
-/* ---------- الموسيقى ---------- */
+
 $('#mfile').onchange=async e=>{const f=e.target.files[0];if(!f)return;
   try{const b=await AC().decodeAudioData(await f.arrayBuffer());music={buf:b,name:f.name};selLib=-1;markLib();$('#mname').textContent='🎵 '+f.name}
   catch(err){toast('صيغة الملف الصوتي غير مدعومة')}e.target.value=''};
 $('#nomu').onclick=()=>{music=null;selLib=-1;markLib();stopPrev();$('#mname').textContent='لم يتم اختيار موسيقى'};
+
 const STY=[
  {n:'هادئ ☁️',bpm:70,r:57,sc:[0,2,4,7,9],w:'sine',d:0},
  {n:'حماسي 🔥',bpm:128,r:62,sc:[0,3,5,7,10],w:'sawtooth',d:1},
@@ -234,7 +245,7 @@ function buildLib(){
     L.appendChild(b)});
 }
 function markLib(){document.querySelectorAll('#lib button').forEach(b=>b.classList.toggle('on',+b.dataset.i===selLib))}
-/* ---------- التشغيل والتسجيل ---------- */
+
 async function run(rec){
   if(running){stopFlag=true;return}
   if(!clips.length)return toast('أضف صورًا أو فيديوهات أولًا');
@@ -262,20 +273,28 @@ async function run(rec){
   if(src)src.start();
   let cur=-1;const t0=performance.now();
   await new Promise(done=>{
+    let alive=true;
+    const finish=()=>{if(!alive)return;alive=false;done()};
     const tick=()=>{
+      if(!alive)return;
       try{
         const t=(performance.now()-t0)/1000;
-        if(stopFlag||t>=T)return done();
-        let i=starts.findIndex((s,k)=>t>=s&&t<s+clips[k].dur);if(i<0)i=clips.length-1;
-        if(i!==cur){if(cur>=0&&clips[cur].type==='video')clips[cur].el.pause();cur=i;
-          if(clips[i].type==='video'){clips[i].el.currentTime=0;clips[i].el.play().catch(()=>{})}}
+        if(stopFlag||t>=T)return finish();
+        let i=starts.findIndex((s,k)=>t>=s&&t<s+clips[k].dur);
+        if(i<0)i=clips.length-1;
+        if(i!==cur){
+          if(cur>=0&&clips[cur].type==='video')clips[cur].el.pause();
+          cur=i;
+          if(clips[i].type==='video'){clips[i].el.currentTime=0;clips[i].el.play().catch(()=>{})}
+        }
         const c=clips[i],l=t-starts[i];let al=1;
-        if(fade){const fi=i>0?l/.4:1,fo=i<clips.length-1?(c.dur-l)/.4:1;al=Math.max(0,Math.min(1,fi,fo))}
+        if(fade){const fi=i>0?Math.min(1,l/.4):1,fo=i<clips.length-1?Math.min(1,(c.dur-l)/.4):1;al=Math.max(0,Math.min(1,fi,fo))}
         frame(c,al);
         if(mg&&T-t<1.2)mg.gain.value=+$('#mvol').value*Math.max(0,(T-t)/1.2);
-        $('#bar i').style.width=(t/T*100)+'%';$('#time').textContent=fmt(t)+' / '+fmt(T);
-        requestAnimationFrame(tick);
-      }catch(err){toast('خطأ: '+err.message);done()}
+        $('#bar i').style.width=(Math.min(t/T,1)*100)+'%';
+        $('#time').textContent=fmt(t)+' / '+fmt(T);
+      }catch(err){toast('خطأ: '+err.message);return finish()}
+      setTimeout(tick,1000/30);
     };
     tick();
   });
@@ -283,7 +302,9 @@ async function run(rec){
   clips.forEach(c=>c.type==='video'&&c.el.pause());
   if(src){try{src.stop()}catch(e){}}
   nodes.forEach(n=>{try{n.disconnect()}catch(e){}});
-  running=false;stopFlag=false;$('#play').textContent='▶ معاينة';$('#exp').disabled=false;$('#bar i').style.width='0';idle();
+  running=false;stopFlag=false;
+  $('#play').textContent='▶ معاينة';$('#exp').disabled=false;$('#bar i').style.width='0';
+  idle();
   if(rec&&mr){
     await new Promise(r=>{mr.onstop=r;mr.stop()});
     if(stopped)return toast('تم إلغاء الإنشاء');
@@ -299,63 +320,24 @@ $('#ratio').onchange=size;
 $('#blur').onchange=()=>{if(!running)idle()};
 buildLib();size();
 
-/* ========== ميزة التثبيت (PWA) ========== */
+/* ===== PWA مبسّط ===== */
 (function(){
-  const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-    <stop offset="0" stop-color="#ff5d8f"/><stop offset="1" stop-color="#35c7ff"/></linearGradient></defs>
-  <rect width="512" height="512" rx="110" fill="#12131a"/>
-  <rect x="72" y="132" width="300" height="248" rx="34" fill="url(#g)"/>
-  <path d="M372 210l68-42c10-6 22 1 22 13v150c0 12-12 19-22 13l-68-42z" fill="#ff5d8f"/>
-  <circle cx="222" cy="256" r="56" fill="#12131a" opacity=".55"/>
-  <path d="M205 228l52 28-52 28z" fill="#fff"/>
-  <g font-family="Arial,Helvetica,sans-serif" font-weight="800" font-size="52" text-anchor="middle">
-    <text x="150" y="452" fill="#ff4d4d">v</text><text x="180" y="452" fill="#ffb62e">i</text>
-    <text x="205" y="452" fill="#ffe94d">d</text><text x="232" y="452" fill="#5be37d">e</text>
-    <text x="261" y="452" fill="#35c7ff">o</text><text x="290" y="452" fill="#7a7bff">a</text>
-    <text x="319" y="452" fill="#d46bff">t</text><text x="345" y="452" fill="#ff6bb5">t</text>
-  </g></svg>`;
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="110" fill="#12131a"/><rect x="72" y="132" width="300" height="248" rx="34" fill="#ff5d8f"/><path d="M372 210l68-42c10-6 22 1 22 13v150c0 12-12 19-22 13l-68-42z" fill="#35c7ff"/></svg>';
   const iconURL='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
-  $('#favicon').href=iconURL;
-  $('#appleicon').href=iconURL;
-
-  const manifest={
-    name:'VideoAtt – محرر الفيديو', short_name:'VideoAtt',
-    description:'محرر فيديو بسيط لدمج الصور والفيديوهات مع الموسيقى.',
-    start_url:location.pathname+location.search, scope:'./',
-    display:'standalone', orientation:'any',
-    background_color:'#12131a', theme_color:'#12131a',
-    lang:'ar', dir:'rtl',
-    icons:[
-      {src:iconURL,sizes:'any',type:'image/svg+xml',purpose:'any'},
-      {src:iconURL,sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}
-    ]
-  };
-  const mURL=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'}));
-  const link=document.createElement('link');link.rel='manifest';link.href=mURL;document.head.appendChild(link);
-
-  if('serviceWorker' in navigator){
-    const swCode=`self.addEventListener('install',e=>self.skipWaiting());
-self.addEventListener('activate',e=>self.clients.claim());
-self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(caches.open('va-v1').then(c=>c.match(e.request).then(r=>r||fetch(e.request).then(res=>{try{c.put(e.request,res.clone())}catch(_){}return res}).catch(()=>r))))});`;
-    try{
-      const swURL=URL.createObjectURL(new Blob([swCode],{type:'application/javascript'}));
-      navigator.serviceWorker.register(swURL).catch(()=>{});
-    }catch(_){}
-  }
-
-  const btn=$('#install');
-  let deferred=null;
+  $('#favicon').href=iconURL;$('#appleicon').href=iconURL;
+  const manifest={name:'VideoAtt – محرر الفيديو',short_name:'VideoAtt',start_url:location.pathname+location.search,scope:'./',display:'standalone',background_color:'#12131a',theme_color:'#12131a',lang:'ar',dir:'rtl',icons:[{src:iconURL,sizes:'any',type:'image/svg+xml',purpose:'any'},{src:iconURL,sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}]};
+  try{
+    const mURL=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'}));
+    const link=document.createElement('link');link.rel='manifest';link.href=mURL;document.head.appendChild(link);
+  }catch(_){}
+  const btn=$('#install');let deferred=null;
   window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e;btn.style.display='inline-flex'});
   window.addEventListener('appinstalled',()=>{deferred=null;btn.style.display='none';toast('تم تثبيت التطبيق ✔')});
   if(window.matchMedia('(display-mode: standalone)').matches)btn.style.display='none';
   btn.onclick=async()=>{
-    if(deferred){deferred.prompt();const r=await deferred.userChoice;deferred=null;
-      if(r.outcome==='accepted'){btn.style.display='none';toast('جارٍ التثبيت…')}else{toast('تم إلغاء التثبيت')}
-    }else{
-      toast('لتثبيت التطبيق: افتح قائمة المتصفح ← "إضافة إلى الشاشة الرئيسية"');
-      btn.style.display='none';
-    }
+    if(deferred){deferred.prompt();try{await deferred.userChoice}catch(_){}
+      deferred=null;btn.style.display='none';toast('جارٍ التثبيت…');
+    }else{toast('لتثبيت التطبيق: افتح قائمة المتصفح ← "إضافة إلى الشاشة الرئيسية"');btn.style.display='none'}
   };
 })();
 </script>
