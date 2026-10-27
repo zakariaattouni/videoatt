@@ -34,6 +34,9 @@ select,input[type=number]{background:#12131a;border:1px solid var(--ln);border-r
 .clip .nm{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .clip .nm small{display:block;color:var(--mu)}
 .clip button{padding:6px 9px}
+.dur{display:flex;align-items:center;gap:2px}
+.dur input{width:56px;text-align:center}
+.dur button{padding:4px 7px;font-weight:700;line-height:1}
 .lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
 .lib button{text-align:center;padding:10px 6px}
 .lib button.on{border-color:var(--ac2);background:#1c3340}
@@ -163,8 +166,17 @@ function render(){
     const d=document.createElement('div');d.className='clip';
     const th=c.type==='image'?`<img class="th" src="${c.url}">`:`<video class="th" src="${c.url}#t=0.1" muted playsinline></video>`;
     d.innerHTML=th+`<div class="nm">${c.name.replace(/</g,'')}<small>${c.type==='image'?'صورة':'فيديو · '+fmt(c.dur)}</small></div>`;
-    if(c.type==='image'){const n=document.createElement('input');n.type='number';n.min=.5;n.max=60;n.step=.5;n.value=c.dur;n.style.width='62px';
-      n.onchange=()=>{c.dur=Math.max(.5,+n.value||3);idle()};d.appendChild(n)}
+    if(c.type==='image'){
+      const w=document.createElement('div');w.className='dur';
+      const mn=document.createElement('button');mn.textContent='−';mn.title='إنقاص المدة';
+      const n=document.createElement('input');n.type='number';n.min=.5;n.max=60;n.step=.5;n.value=c.dur;
+      const pl=document.createElement('button');pl.textContent='+';pl.title='زيادة المدة';
+      const set=v=>{c.dur=Math.max(.5,Math.min(60,+v||3));n.value=c.dur;idle()};
+      mn.onclick=()=>set(c.dur-.5);
+      pl.onclick=()=>set(c.dur+.5);
+      n.onchange=()=>set(n.value);
+      w.append(mn,n,pl);d.appendChild(w);
+    }
     [['▲',-1],['▼',1],['✕',0]].forEach(([t,m])=>{const b=document.createElement('button');b.textContent=t;
       b.onclick=()=>{if(running)return toast('أوقف المعاينة أولًا');
         if(!m)clips.splice(i,1);else{const j=i+m;if(j<0||j>=clips.length)return;[clips[i],clips[j]]=[clips[j],clips[i]]}render();size()};d.appendChild(b)});
@@ -230,7 +242,7 @@ async function run(rec){
   const T=total(),dest=a.createMediaStreamDestination(),outN=rec?dest:a.destination,fade=$('#fade').checked,keep=$('#vaud').checked;
   const starts=[];let acc=0;clips.forEach(c=>{starts.push(acc);acc+=c.dur});
   const nodes=[];let src=null,mg=null;
-  if(music){src=a.createBufferSource();src.buffer=music.buf;src.loop=true;mg=a.createGain();mg.gain.value=+$('#mvol').value;
+  if(music){src=a.createBufferSource();src.buffer=music.buf;src.loop=false;mg=a.createGain();mg.gain.value=+$('#mvol').value;
     src.connect(mg);mg.connect(outN);nodes.push(mg)}
   clips.forEach(c=>{if(c.type==='video'){if(!c.node)c.node=a.createMediaElementSource(c.el);c.g=a.createGain();c.g.gain.value=keep?1:0;
     try{c.node.disconnect()}catch(e){}c.node.connect(c.g);c.g.connect(outN);nodes.push(c.g)}});
@@ -271,7 +283,7 @@ async function run(rec){
   clips.forEach(c=>c.type==='video'&&c.el.pause());
   if(src){try{src.stop()}catch(e){}}
   nodes.forEach(n=>{try{n.disconnect()}catch(e){}});
-  running=false;$('#play').textContent='▶ معاينة';$('#exp').disabled=false;$('#bar i').style.width='0';idle();
+  running=false;stopFlag=false;$('#play').textContent='▶ معاينة';$('#exp').disabled=false;$('#bar i').style.width='0';idle();
   if(rec&&mr){
     await new Promise(r=>{mr.onstop=r;mr.stop()});
     if(stopped)return toast('تم إلغاء الإنشاء');
@@ -322,7 +334,6 @@ buildLib();size();
   const mURL=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'}));
   const link=document.createElement('link');link.rel='manifest';link.href=mURL;document.head.appendChild(link);
 
-  // Service Worker بسيط لعمل التطبيق بدون اتصال بعد التثبيت
   if('serviceWorker' in navigator){
     const swCode=`self.addEventListener('install',e=>self.skipWaiting());
 self.addEventListener('activate',e=>self.clients.claim());
