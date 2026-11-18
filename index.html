@@ -24,7 +24,7 @@ button,.btn,select,input{font:inherit;color:var(--tx)}
 button,.btn{background:#2a2d3f;border:1px solid var(--ln);border-radius:9px;padding:9px 14px;cursor:pointer;display:inline-block}
 button.p,.btn.p{background:var(--ac);border-color:var(--ac);color:#1a0610;font-weight:700}
 button:disabled{opacity:.45}
-select,input[type=number]{background:#12131a;border:1px solid var(--ln);border-radius:8px;padding:7px}
+select,input[type=number],input[type=text]{background:#12131a;border:1px solid var(--ln);border-radius:8px;padding:7px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
 #bar{height:6px;background:#2a2d3f;overflow:hidden}
 #bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ac),var(--ac2))}
@@ -43,6 +43,14 @@ select,input[type=number]{background:#12131a;border:1px solid var(--ln);border-r
 .mu{color:var(--mu);font-size:13px}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#000c;padding:9px 16px;border-radius:20px;display:none;z-index:9}
 video#res{width:100%;max-height:60vh;background:#000;border-radius:10px;margin-top:10px}
+.cap-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px}
+.cap-grid label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mu)}
+.cap-grid label input,.cap-grid label select,.cap-grid label input[type=color]{background:#12131a;border:1px solid var(--ln);border-radius:8px;padding:6px;color:var(--tx);width:100%}
+input[type=color]{padding:2px;height:36px;cursor:pointer}
+.pos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:110px;margin-top:4px}
+.pos-grid button{padding:6px 0;font-size:12px;line-height:1}
+.pos-grid button.on{background:var(--ac);border-color:var(--ac);color:#1a0610;font-weight:700}
+#capSizeV{color:var(--ac2);font-weight:700}
 </style>
 <link rel="icon" id="favicon" type="image/svg+xml">
 <link rel="apple-touch-icon" id="appleicon">
@@ -81,7 +89,52 @@ video#res{width:100%;max-height:60vh;background:#000;border-radius:10px;margin-t
   <div class="lib" id="lib"></div>
 </section>
 <section>
-  <h2>3) الإعدادات</h2>
+  <h2>3) الكابشن (النص على الفيديو)</h2>
+  <div class="row"><label style="display:flex;align-items:center;gap:8px"><input id="capOn" type="checkbox"> تفعيل الكابشن</label></div>
+  <div class="cap-grid">
+    <label>نص الكابشن
+      <input id="capText" type="text" placeholder="اكتب النص هنا..." value="">
+    </label>
+    <label>حجم الخط (<span id="capSizeV">48</span>)
+      <input id="capSize" type="range" min="12" max="120" step="1" value="48">
+    </label>
+    <label>الخط
+      <select id="capFont">
+        <option value="Arial, sans-serif">Arial</option>
+        <option value="'Segoe UI', Tahoma, sans-serif" selected>Segoe UI</option>
+        <option value="Tahoma, sans-serif">Tahoma</option>
+        <option value="'Times New Roman', serif">Times New Roman</option>
+        <option value="Georgia, serif">Georgia</option>
+        <option value="'Courier New', monospace">Courier New</option>
+        <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+        <option value="Verdana, sans-serif">Verdana</option>
+        <option value="'Comic Sans MS', cursive">Comic Sans MS</option>
+        <option value="Impact, sans-serif">Impact</option>
+      </select>
+    </label>
+    <label>لون النص
+      <input id="capColor" type="color" value="#ffffff">
+    </label>
+    <label>لون الحدود
+      <input id="capStroke" type="color" value="#000000">
+    </label>
+    <label>الموقع (اضغط لاختيار)
+      <div class="pos-grid" id="posGrid">
+        <button type="button" data-p="tl">↖</button>
+        <button type="button" data-p="tc">↑</button>
+        <button type="button" data-p="tr">↗</button>
+        <button type="button" data-p="ml">←</button>
+        <button type="button" data-p="mc" class="on">●</button>
+        <button type="button" data-p="mr">→</button>
+        <button type="button" data-p="bl">↙</button>
+        <button type="button" data-p="bc">↓</button>
+        <button type="button" data-p="br">↘</button>
+      </div>
+    </label>
+  </div>
+</section>
+<section>
+  <h2>4) الإعدادات</h2>
   <div class="row">
     <span>المقاس</span>
     <select id="ratio">
@@ -100,12 +153,11 @@ video#res{width:100%;max-height:60vh;background:#000;border-radius:10px;margin-t
   <video id="res" controls playsinline></video>
   <div class="row"><a id="dl" class="btn p" download>⬇ حفظ الفيديو على الجهاز</a></div>
 </section>
-<div id="toast"></div>
-
-<script>
+<div id="toast"></div><script>
 const $=s=>document.querySelector(s), cv=$('#cv'), cx=cv.getContext('2d');
 const bg=document.createElement('canvas'), bx=bg.getContext('2d');
 let clips=[], music=null, ac=null, running=false, stopFlag=false, selLib=-1, prevSrc=null;
+let capPos='mc';
 const cache={};
 const COL=['#ff4d4d','#ffb62e','#ffe94d','#5be37d','#35c7ff','#7a7bff','#d46bff','#ff6bb5'];
 const MAXDUR=600;
@@ -117,7 +169,47 @@ window.onunhandledrejection=e=>toast('خطأ: '+(e.reason&&e.reason.message||e.r
 const AC=()=>ac||(ac=new (window.AudioContext||window.webkitAudioContext)());
 const total=()=>clips.reduce((a,c)=>a+c.dur,0);
 const dims=c=>c.type==='video'?[c.el.videoWidth,c.el.videoHeight]:[c.el.naturalWidth,c.el.naturalHeight];
-
+/* ===== الكابشن ===== */
+function drawCaption(){
+  if(!$('#capOn').checked)return;
+  const txt=$('#capText').value;
+  if(!txt.trim())return;
+  const W=cv.width,H=cv.height;
+  const size=+$('#capSize').value;
+  const font=$('#capFont').value;
+  const color=$('#capColor').value;
+  const stroke=$('#capStroke').value;
+  cx.save();
+  cx.font=`700 ${size}px ${font}`;
+  cx.textBaseline='middle';
+  cx.direction='rtl';
+  const m=size*0.6;
+  const lines=txt.split('\n');
+  const lh=size*1.25;
+  let cx0=W/2, cy0=H/2, ta='center';
+  switch(capPos){
+    case 'tl':cx0=W-m;cy0=m+lh/2;ta='right';break;
+    case 'tc':cx0=W/2;cy0=m+lh/2;ta='center';break;
+    case 'tr':cx0=m;cy0=m+lh/2;ta='left';break;
+    case 'ml':cx0=W-m;cy0=H/2-lh*(lines.length-1)/2;ta='right';break;
+    case 'mc':cx0=W/2;cy0=H/2-lh*(lines.length-1)/2;ta='center';break;
+    case 'mr':cx0=m;cy0=H/2-lh*(lines.length-1)/2;ta='left';break;
+    case 'bl':cx0=W-m;cy0=H-m-lh*(lines.length-1);ta='right';break;
+    case 'bc':cx0=W/2;cy0=H-m-lh*(lines.length-1);ta='center';break;
+    case 'br':cx0=m;cy0=H-m-lh*(lines.length-1);ta='left';break;
+  }
+  cx.textAlign=ta;
+  cx.lineWidth=Math.max(2,size*0.12);
+  cx.strokeStyle=stroke;
+  cx.lineJoin='round';
+  lines.forEach((line,i)=>{
+    const y=cy0+i*lh;
+    cx.strokeText(line,cx0,y);
+    cx.fillStyle=color;
+    cx.fillText(line,cx0,y);
+  });
+  cx.restore();
+}
 function size(){
   if(running)return;
   const v=$('#ratio').value;let w=1280,h=720;
@@ -148,6 +240,7 @@ function frame(c,a=1){
       cx.globalAlpha=a;cx.drawImage(e,(W-w*s)/2,(H-h*s)/2,w*s,h*s);cx.globalAlpha=1;
     }}
   watermark();
+  drawCaption();
 }
 function idle(){
   frame(clips[0]);
@@ -157,7 +250,6 @@ function idle(){
   }
   $('#time').textContent='0:00 / '+fmt(total());
 }
-
 $('#files').onchange=async e=>{
   for(const f of e.target.files){
     try{const url=URL.createObjectURL(f);
@@ -193,12 +285,10 @@ function render(){
     L.appendChild(d);
   });
 }
-
 $('#mfile').onchange=async e=>{const f=e.target.files[0];if(!f)return;
   try{const b=await AC().decodeAudioData(await f.arrayBuffer());music={buf:b,name:f.name};selLib=-1;markLib();$('#mname').textContent='🎵 '+f.name}
   catch(err){toast('صيغة الملف الصوتي غير مدعومة')}e.target.value=''};
 $('#nomu').onclick=()=>{music=null;selLib=-1;markLib();stopPrev();$('#mname').textContent='لم يتم اختيار موسيقى'};
-
 const STY=[
  {n:'هادئ ☁️',bpm:70,r:57,sc:[0,2,4,7,9],w:'sine',d:0},
  {n:'حماسي 🔥',bpm:128,r:62,sc:[0,3,5,7,10],w:'sawtooth',d:1},
@@ -244,9 +334,7 @@ function buildLib(){
         src.connect(g);g.connect(a.destination);src.start();src.stop(a.currentTime+6);prevSrc=src}catch(e){toast('تعذّر توليد المقطع')}b.disabled=false};
     L.appendChild(b)});
 }
-function markLib(){document.querySelectorAll('#lib button').forEach(b=>b.classList.toggle('on',+b.dataset.i===selLib))}
-
-async function run(rec){
+function markLib(){document.querySelectorAll('#lib button').forEach(b=>b.classList.toggle('on',+b.dataset.i===selLib))}async function run(rec){
   if(running){stopFlag=true;return}
   if(!clips.length)return toast('أضف صورًا أو فيديوهات أولًا');
   stopPrev();const a=AC();await a.resume();
@@ -314,12 +402,27 @@ async function run(rec){
     $('#out').scrollIntoView({behavior:'smooth'});toast('تم إنشاء الفيديو ✔ اضغط حفظ');
   }
 }
+/* ===== ربط أزرار التشغيل والإعدادات ===== */
 $('#play').onclick=()=>run(false);
 $('#exp').onclick=()=>run(true);
 $('#ratio').onchange=size;
 $('#blur').onchange=()=>{if(!running)idle()};
+/* ===== ربط أحداث الكابشن ===== */
+$('#capOn').onchange=()=>{if(!running)idle()};
+$('#capText').oninput=()=>{if(!running)idle()};
+$('#capSize').oninput=e=>{$('#capSizeV').textContent=e.target.value;if(!running)idle()};
+$('#capFont').onchange=()=>{if(!running)idle()};
+$('#capColor').oninput=()=>{if(!running)idle()};
+$('#capStroke').oninput=()=>{if(!running)idle()};
+document.querySelectorAll('#posGrid button').forEach(b=>{
+  b.onclick=()=>{
+    capPos=b.dataset.p;
+    document.querySelectorAll('#posGrid button').forEach(x=>x.classList.toggle('on',x===b));
+    if(!running)idle();
+  };
+});
+/* ===== التهيئة ===== */
 buildLib();size();
-
 /* ===== PWA مبسّط ===== */
 (function(){
   const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="110" fill="#12131a"/><rect x="72" y="132" width="300" height="248" rx="34" fill="#ff5d8f"/><path d="M372 210l68-42c10-6 22 1 22 13v150c0 12-12 19-22 13l-68-42z" fill="#35c7ff"/></svg>';
